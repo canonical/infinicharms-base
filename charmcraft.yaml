@@ -41,6 +41,17 @@ parts:
     build-snaps:
       - astral-uv
 
+  # The `charm` (uv) plugin only copies `src/` and `lib/` into the payload.
+  # SOUL.md and prompts/ are read at runtime (failure_agent.py) and are also
+  # swap targets for the self-update loop (updater.py SWAP_TARGETS), so they
+  # must be staged into the charm root explicitly via the dump plugin.
+  soul-and-prompts:
+    plugin: dump
+    source: .
+    stage:
+      - SOUL.md
+      - prompts
+
 # Charm configuration. Tokens are plain `type: string` config (not Juju secrets)
 # to keep `juju config` usage straightforward for the hackathon. They should
 # still be treated as sensitive and never printed to logs. See PLAN.md §2.7.
