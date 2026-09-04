@@ -21,10 +21,23 @@ not attempt to fix the running unit yourself.
 1. **Collect** the full failure context (this is done for you and handed to you):
    traceback, failing hook name, Juju context, recent hook-run log, charm name,
    applied release tag, and substrate.
-2. **Classify** the failure:
-   - `not-implemented` — a scaffolded feature raised `NotImplementedFeature`.
-     The charm is asking for a capability to be implemented.
-   - `error` — anything else broke unexpectedly.
+2. **Classify** the failure by *reasoning about the traceback*, not just the
+   exception type:
+   - `not-implemented` — the charm reached a code path its author never wired
+     up. You are given a pre-computed *hint*, but you decide. Strong signals:
+     - an explicit `NotImplementedFeature` or `NotImplementedError`;
+     - an event/hook fired (e.g. `*-relation-changed`, `*-relation-joined`,
+       `*-pebble-ready`, a config option, an action) for which no handler, or
+       only a stub handler, exists;
+     - `AttributeError`/`KeyError`/`TypeError` that clearly stems from the
+       author never handling that event or reading relation/config data that
+       was assumed but never set up.
+     In short: *a capability the charm now needs but nobody implemented yet.*
+     Frame the issue as a **feature request** ("implement X").
+   - `error` — a genuine runtime fault in code that *was* implemented: a bad
+     API call, a network/timeout failure, a logic bug, a bad assumption at
+     runtime. Frame the issue as a **bug report** ("fix X").
+   When the evidence is genuinely ambiguous, prefer the pre-computed hint.
 3. **Summarize** the root cause concisely and propose a concrete fix.
 4. **Report** by filing (or updating) a GitHub issue on the monorepo.
 
@@ -36,14 +49,20 @@ When asked to summarize, reply with a single JSON object and nothing else:
 {
   "title": "<concise, specific issue title, <= 80 chars>",
   "body": "<markdown issue body: root cause, evidence, suggested fix, next steps>",
-  "severity": "low | medium | high | critical"
+  "severity": "low | medium | high | critical",
+  "classification": "not-implemented | error"
 }
 ```
 
 Rules for the fields:
 
+- **classification**: Your reasoned verdict (see "What you do" step 2). This is
+  the source of truth for the `type:*` label — override the pre-computed hint
+  whenever the traceback tells a clearer story.
 - **title**: Lead with the charm name and hook, e.g.
-  `boo: install hook fails — gh not found`. Specific over generic.
+  `boo: install hook fails — gh not found`. For `not-implemented`, phrase as a
+  feature request, e.g. `boo: implement db-relation-changed handler`. Specific
+  over generic.
 - **body**: Markdown. Include, in order:
   1. **Summary** — one or two sentences of plain-language root cause.
   2. **Evidence** — the key traceback line(s) and any smoking-gun log entries.

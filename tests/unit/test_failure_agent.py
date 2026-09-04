@@ -108,3 +108,96 @@ def test_summarize_uses_llm(monkeypatch, tmp_path):
     result = failure_agent._summarize(config, diag, "error")
     assert result.title == "LLM title"
     assert result.severity == "high"
+
+
+def _run_capturing_labels(monkeypatch, tmp_path, exc, llm_result):
+    """Run the agent with a stubbed LLM + GitHub and return the issue labels."""
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    monkeypatch.setenv("JUJU_DISPATCH_PATH", "hooks/db-relation-changed")
+
+    captured = {}
+
+    class FakeGH:
+        def __init__(self, repo, token):
+            pass
+
+        def issue_is_open(self, number):
+            return False
+
+        def create_issue(self, title, body, labels=None):
+            captured["labels"] = labels
+            return 1
+
+        def comment_issue(self, number, body):
+            pass
+
+    class FakeClient:
+        def __init__(self, token, model, base_url=None):
+            pass
+
+        def summarize_failure(self, system, user):
+            return llm_result
+
+    monkeypatch.setattr(failure_agent, "GitHubClient", FakeGH)
+    monkeypatch.setattr(failure_agent, "LLMClient", FakeClient)
+    config = failure_agent.AgentConfig(
+        monorepo="acme/mono", charm_name="boo", github_token="tok", llm_api_token="k"
+    )
+    failure_agent.run(config, _exc_info(exc))
+    return captured["labels"]
+
+
+def test_llm_overrides_heuristic_to_not_implemented(monkeypatch, tmp_path):
+    """LLM labels an unexpected AttributeError as not-implemented.
+
+    Even though no ``NotImplementedFeature`` was raised, the LLM's verdict wins.
+    """
+    result = LLMResult(
+        title="boo: implement db relation",
+        body="...",
+        severity="medium",
+        classification="not-implemented",
+    )
+    labels = _run_capturing_labels(
+        monkeypatch, tmp_path, AttributeError("no attr 'relation'"), result
+    )
+    assert "type:not-implemented" in labels
+    assert "type:error" not in labels
+
+
+def test_llm_overrides_heuristic_to_error(monkeypatch, tmp_path):
+    """LLM downgrades a NotImplementedFeature it deems a real bug to error.
+
+    The LLM verdict wins over the type-based hint.
+    """
+    result = LLMResult(
+        title="boo: db relation crashes",
+        body="...",
+        severity="high",
+        classification="error",
+    )
+    labels = _run_capturing_labels(
+        monkeypatch, tmp_path, NotImplementedFeature("db"), result
+    )
+    assert "type:error" in labels
+    assert "type:not-implemented" not in labels
+
+
+def test_unknown_llm_classification_falls_back_to_heuristic(monkeypatch, tmp_path):
+    """When the LLM declines to classify, labeling uses the type-based heuristic."""
+    result = LLMResult(title="t", body="b", severity="low", classification="unknown")
+    labels = _run_capturing_labels(
+        monkeypatch, tmp_path, NotImplementedFeature("db"), result
+    )
+    assert "type:not-implemented" in labels
+
+
+def test_fallback_template_uses_heuristic_classification(monkeypatch, tmp_path):
+    """With no LLM token, the fallback result carries the heuristic classification."""
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    from infinicharms import diagnostics
+
+    diag = diagnostics.collect(*_exc_info(ValueError("boom")), charm_name="boo")
+    config = failure_agent.AgentConfig(charm_name="boo")  # no llm_api_token
+    result = failure_agent._summarize(config, diag, "not-implemented")
+    assert result.classification == "not-implemented"

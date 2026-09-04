@@ -36,11 +36,21 @@ class LLMError(Exception):
 
 @dataclass
 class LLMResult:
-    """Structured result of a failure summarization."""
+    """Structured result of a failure summarization.
+
+    Attributes:
+        classification: The LLM's own judgment of ``not-implemented`` vs
+            ``error`` (or ``unknown`` if it declined/failed to decide). The
+            LLM sees a pre-computed heuristic guess in the prompt but is
+            explicitly allowed to override it -- e.g. an unhandled relation
+            event surfacing as a plain ``AttributeError`` is still a missing
+            feature, even though no ``NotImplementedFeature`` was raised.
+    """
 
     title: str
     body: str
     severity: str = "unknown"
+    classification: str = "unknown"
     raw: str = ""
 
 
@@ -120,9 +130,13 @@ class LLMClient:
         except Exception as exc:  # noqa: BLE001 - map any SDK error to LLMError
             raise LLMError(f"LLM request failed: {exc}") from exc
         parsed = result.output
+        classification = (parsed.classification or "unknown").strip().lower()
+        if classification not in ("not-implemented", "error"):
+            classification = "unknown"
         return LLMResult(
             title=(parsed.title or "Charm hook failure").strip(),
             body=(parsed.body or "").strip(),
             severity=(parsed.severity or "unknown").strip(),
+            classification=classification,
             raw=str(parsed),
         )

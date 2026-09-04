@@ -63,7 +63,15 @@ def _read_text(path: Path, default: str = "") -> str:
 
 
 def classify(exc: BaseException | None) -> str:
-    """Return ``not-implemented`` for NotImplementedFeature, else ``error``."""
+    """Heuristic (type-based) failure classification hint.
+
+    This is only a *prior* handed to the LLM, not the final verdict. An explicit
+    ``NotImplementedFeature`` is a strong ``not-implemented`` signal; anything
+    else defaults to ``error``. The LLM is free to override this -- e.g. a
+    downstream charm that forgot to observe/handle an event will surface a plain
+    ``AttributeError``/``KeyError`` that is really a missing-feature gap, not a
+    runtime bug. See ``run()`` for how the LLM's judgment wins.
+    """
     if isinstance(exc, NotImplementedFeature):
         return "not-implemented"
     return "error"
@@ -121,7 +129,13 @@ def _fallback_body(diag: diagnostics.Diagnostics, classification: str) -> str:
 def _summarize(
     config: AgentConfig, diag: diagnostics.Diagnostics, classification: str
 ) -> LLMResult:
-    """Summarize the failure via the LLM, falling back to a template."""
+    """Summarize the failure via the LLM, falling back to a template.
+
+    ``classification`` is the *heuristic* hint; the returned ``LLMResult`` may
+    carry the LLM's own ``classification`` which the caller prefers when set.
+    On the fallback (no token / LLM failure) path we echo the heuristic hint so
+    labeling never loses the type-based signal.
+    """
     fallback_title = f"{diag.charm_name or 'charm'}: {diag.hook or 'hook'} failed"
     if not config.llm_api_token:
         logger.info("No LLM API token; using fallback issue template")
@@ -129,6 +143,7 @@ def _summarize(
             title=fallback_title,
             body=_fallback_body(diag, classification),
             severity="unknown",
+            classification=classification,
         )
     try:
         client = LLMClient(
@@ -145,6 +160,7 @@ def _summarize(
             title=fallback_title,
             body=_fallback_body(diag, classification),
             severity="unknown",
+            classification=classification,
         )
 
 
@@ -210,7 +226,23 @@ def run(config: AgentConfig, exc_info: tuple | None) -> None:
             charm_name=config.charm_name,
             applied_tag=st.applied_tag,
         )
-        classification = classify(exc)
+        # Heuristic (type-based) hint handed to the LLM as a prior.
+        heuristic = classify(exc)
+
+        result = _summarize(config, diag, heuristic)
+
+        # The LLM's own judgment wins when it made one; otherwise fall back to
+        # the type-based heuristic. This is what lets an unexpected exception
+        # from a downstream charm that forgot to handle an event be classified
+        # as ``not-implemented`` even though no ``NotImplementedFeature`` was
+        # raised.
+        classification = heuristic
+        if result.classification in ("not-implemented", "error"):
+            classification = result.classification
+            if classification != heuristic:
+                logger.info(
+                    "LLM reclassified failure %s -> %s", heuristic, classification
+                )
 
         # Record the most recent failure snapshot for diagnostics/context.
         st.last_failure = {
@@ -224,7 +256,6 @@ def run(config: AgentConfig, exc_info: tuple | None) -> None:
         st.save()
         monitor.record("failed", status=diag.exception_type, hook=diag.hook)
 
-        result = _summarize(config, diag, classification)
         _file_or_update_issue(config, diag, result, classification, st)
     except GitHubError as exc:
         logger.warning("Failure agent could not file issue: %s", exc)

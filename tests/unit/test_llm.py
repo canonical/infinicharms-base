@@ -77,6 +77,29 @@ def test_summarize_failure_fills_defaults(monkeypatch):
     result = client.summarize_failure("sys", "user")
     assert result.title == "Charm hook failure"
     assert result.severity == "unknown"
+    assert result.classification == "unknown"
+
+
+def test_summarize_failure_parses_classification(monkeypatch):
+    """A valid classification from the model is normalized and returned."""
+    _fake_agent(
+        monkeypatch,
+        LLMResult(title="T", body="B", severity="low", classification="NOT-IMPLEMENTED"),
+    )
+    client = LLMClient("tok")
+    result = client.summarize_failure("sys", "user")
+    assert result.classification == "not-implemented"
+
+
+def test_summarize_failure_normalizes_bad_classification(monkeypatch):
+    """An out-of-contract classification degrades to ``unknown``."""
+    _fake_agent(
+        monkeypatch,
+        LLMResult(title="T", body="B", severity="low", classification="maybe"),
+    )
+    client = LLMClient("tok")
+    result = client.summarize_failure("sys", "user")
+    assert result.classification == "unknown"
 
 
 def test_summarize_failure_maps_errors(monkeypatch):

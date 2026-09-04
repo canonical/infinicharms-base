@@ -15,9 +15,14 @@ Placeholders (Python str.format style) filled in by failure_agent.py:
 A hook in the InfiniCharms charm `{charm_name}` failed. Analyze the failure and
 produce an issue for the monorepo, following the output contract in your SOUL.
 
-## Failure classification (pre-computed)
+## Failure classification hint (heuristic — you may override)
 
-`{classification}`
+A cheap type-based guess: `{classification}`. Do **not** trust it blindly.
+Reason about the traceback and hook below: if the charm hit an event or data
+path its author never implemented (e.g. an unobserved relation/config/pebble
+event surfacing as `AttributeError`/`KeyError`), classify it as
+`not-implemented` even when the guess says `error`. Put your final verdict in
+the `classification` field of your JSON reply.
 
 ## Context
 
@@ -40,4 +45,5 @@ produce an issue for the monorepo, following the output contract in your SOUL.
 {recent_hooks}
 ```
 
-Reply with ONLY the JSON object described in your SOUL (title, body, severity).
+Reply with ONLY the JSON object described in your SOUL (title, body, severity,
+classification).
