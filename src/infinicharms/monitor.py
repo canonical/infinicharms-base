@@ -4,7 +4,7 @@
 """Hook-run monitoring.
 
 Records a small rolling log of hook runs and outcomes to
-``$JUJU_CHARM_DIR/.infinitycharms/hooks.log`` so the failure agent has recent
+``$JUJU_CHARM_DIR/.infinicharms/hooks.log`` so the failure agent has recent
 context to attach to issues. See PLAN.md §6.2.
 
 The monitor is best-effort: recording must never break a hook.

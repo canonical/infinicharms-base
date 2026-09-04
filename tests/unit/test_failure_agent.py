@@ -3,9 +3,9 @@
 
 import sys
 
-from infinitycharms import failure_agent, state
-from infinitycharms.exceptions import NotImplementedFeature
-from infinitycharms.llm import LLMResult
+from infinicharms import failure_agent, state
+from infinicharms.exceptions import NotImplementedFeature
+from infinicharms.llm import LLMResult
 
 
 def _exc_info(exc: BaseException):
@@ -92,7 +92,7 @@ def test_run_comments_on_existing_open_issue(monkeypatch, tmp_path):
 def test_summarize_uses_llm(monkeypatch, tmp_path):
     """When a token is present, the LLM result is used."""
     monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
-    from infinitycharms import diagnostics
+    from infinicharms import diagnostics
 
     diag = diagnostics.collect(*_exc_info(ValueError("boom")), charm_name="boo")
 

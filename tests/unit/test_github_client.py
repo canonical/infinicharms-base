@@ -3,8 +3,8 @@
 
 import pytest
 
-from infinitycharms import github_client
-from infinitycharms.github_client import GitHubClient, GitHubError
+from infinicharms import github_client
+from infinicharms.github_client import GitHubClient, GitHubError
 
 
 def test_parse_issue_number():

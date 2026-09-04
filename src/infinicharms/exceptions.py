@@ -10,11 +10,11 @@ decide which issue template/label to use. See PLAN.md §2.2.
 from __future__ import annotations
 
 
-class InfinityCharmsError(Exception):
-    """Base class for all InfinityCharms charm exceptions."""
+class InfiniCharmsError(Exception):
+    """Base class for all InfiniCharms charm exceptions."""
 
 
-class NotImplementedFeature(InfinityCharmsError):  # noqa: N818 - intentional public API name
+class NotImplementedFeature(InfiniCharmsError):  # noqa: N818 - intentional public API name
     """A scaffolded feature has not been implemented yet.
 
     Scaffolded handlers raise this to signal "please implement X". The failure

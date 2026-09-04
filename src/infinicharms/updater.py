@@ -99,7 +99,7 @@ class Updater:
         url = f"{GITHUB_API}/repos/{self._monorepo}{path}"
         headers = {
             "Accept": "application/vnd.github+json",
-            "User-Agent": "infinitycharms-base",
+            "User-Agent": "infinicharms-base",
         }
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
@@ -201,7 +201,7 @@ class Updater:
             self._swap_targets(extract_dir)
 
     def _download(self, url: str, dest: Path) -> None:
-        headers = {"User-Agent": "infinitycharms-base", "Accept": "application/octet-stream"}
+        headers = {"User-Agent": "infinicharms-base", "Accept": "application/octet-stream"}
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
         request = urllib.request.Request(url, headers=headers)

@@ -1,7 +1,7 @@
 # Copyright 2026 Ubuntu
 # See LICENSE file for licensing details.
 
-from infinitycharms import state
+from infinicharms import state
 
 
 def test_state_roundtrip(tmp_path):

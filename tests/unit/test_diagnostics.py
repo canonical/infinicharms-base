@@ -3,8 +3,8 @@
 
 import sys
 
-from infinitycharms import diagnostics
-from infinitycharms.exceptions import NotImplementedFeature
+from infinicharms import diagnostics
+from infinicharms.exceptions import NotImplementedFeature
 
 
 def _exc_info(exc: BaseException):

@@ -23,5 +23,5 @@ def test_deploy(charm: pathlib.Path, juju: jubilant.Juju):
     Without ``monorepo``/``charm-name`` config the charm reports blocked, so we
     wait for the unit to settle rather than for active.
     """
-    juju.deploy(charm, app="infinitycharms-base")
+    juju.deploy(charm, app="infinicharms-base")
     juju.wait(lambda status: jubilant.all_blocked(status) or jubilant.all_active(status))

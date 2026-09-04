@@ -1,7 +1,7 @@
 # Copyright 2026 Ubuntu
 # See LICENSE file for licensing details.
 
-"""Persistent charm state stored in ``$JUJU_CHARM_DIR/.infinitycharms/state.json``.
+"""Persistent charm state stored in ``$JUJU_CHARM_DIR/.infinicharms/state.json``.
 
 State survives between hook invocations *within a charm revision* (it lives on
 the charm's on-disk directory). It is used to:
@@ -23,7 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-STATE_DIRNAME = ".infinitycharms"
+STATE_DIRNAME = ".infinicharms"
 STATE_FILENAME = "state.json"
 
 
@@ -33,7 +33,7 @@ def charm_dir() -> Path:
 
 
 def state_dir() -> Path:
-    """Return the ``.infinitycharms`` directory under the charm dir."""
+    """Return the ``.infinicharms`` directory under the charm dir."""
     return charm_dir() / STATE_DIRNAME
 
 

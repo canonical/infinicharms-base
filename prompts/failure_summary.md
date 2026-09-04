@@ -12,7 +12,7 @@ Placeholders (Python str.format style) filled in by failure_agent.py:
   {traceback}        - full traceback text
   {recent_hooks}     - JSON list of recent hook-run entries
 -->
-A hook in the InfinityCharms charm `{charm_name}` failed. Analyze the failure and
+A hook in the InfiniCharms charm `{charm_name}` failed. Analyze the failure and
 produce an issue for the monorepo, following the output contract in your SOUL.
 
 ## Failure classification (pre-computed)

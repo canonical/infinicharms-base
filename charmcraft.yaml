@@ -1,18 +1,18 @@
 # This file configures Charmcraft.
 # See https://documentation.ubuntu.com/charmcraft/stable/reference/files/charmcraft-yaml-file/
 #
-# InfinityCharms base (template) charm.
+# InfiniCharms base (template) charm.
 #
 # This is a WORKLOAD-LESS, INFRASTRUCTURE-AGNOSTIC charm: it declares no
 # `containers:` block and does nothing that only makes sense on a single
 # substrate, so the same single `.charm` artifact deploys on both machine and
 # Kubernetes clouds. See PLAN.md §2.5.
 type: charm
-name: infinitycharms-base
-title: InfinityCharms Base
+name: infinicharms-base
+title: InfiniCharms Base
 summary: Self-healing, workload-less template charm.
 description: |
-  Base template charm for the InfinityCharms self-healing ecosystem.
+  Base template charm for the InfiniCharms self-healing ecosystem.
 
   It ships three baked-in capabilities: (1) a failure agent that, on any hook
   failure, collects diagnostics, summarizes the failure with an LLM, and files a
@@ -23,7 +23,7 @@ description: |
   The charm is workload-less and infrastructure-agnostic: the same artifact
   deploys on machine or Kubernetes clouds.
 
-  It is intended as the seed that the InfinityCharms monorepo scaffolds every new
+  It is intended as the seed that the InfiniCharms monorepo scaffolds every new
   charm from.
 
 base: ubuntu@24.04
@@ -49,8 +49,8 @@ config:
     monorepo:
       type: string
       description: |
-        owner/repo of the InfinityCharms monorepo, used for creating issues and
-        fetching releases (e.g. "acme/infinitycharms").
+        owner/repo of the InfiniCharms monorepo, used for creating issues and
+        fetching releases (e.g. "acme/infinicharms").
     charm-name:
       type: string
       description: |

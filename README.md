@@ -8,12 +8,12 @@ Avoid using this README file for information that is maintained or published els
 Use links instead.
 -->
 
-# infinitycharms-base
+# infinicharms-base
 
-Charmhub package name: infinitycharms-base
-More information: https://charmhub.io/infinitycharms-base
+Charmhub package name: infinicharms-base
+More information: https://charmhub.io/infinicharms-base
 
-The **InfinityCharms base (template) charm**: a workload-less,
+The **InfiniCharms base (template) charm**: a workload-less,
 infrastructure-agnostic, self-healing seed charm. The same single `.charm`
 artifact deploys on both machine and Kubernetes clouds (no `containers:` block).
 
@@ -30,7 +30,7 @@ It bakes in three capabilities:
    (`<charm-name>/vX.Y.Z`), unpack it, and swap in the new code under
    `$JUJU_CHARM_DIR`.
 3. **Hook monitoring** — records every hook run and status to
-   `.infinitycharms/hooks.log` for context.
+   `.infinicharms/hooks.log` for context.
 
 See `PLAN.md` for the full design and rationale.
 
@@ -49,10 +49,11 @@ See `PLAN.md` for the full design and rationale.
 
 ### Choosing an LLM provider / model
 
-The failure agent talks to any **OpenAI-compatible** endpoint via the official
-`openai` SDK, so you can use OpenRouter (default), OpenAI, or a self-hosted
-gateway just by changing `llm-base-url` and `llm-model`. If `llm-api-token` is
-unset, the agent skips the LLM and files a templated issue instead.
+The failure agent talks to any **OpenAI-compatible** endpoint via
+[Pydantic AI](https://pydantic.dev/docs/ai/overview/), so you can use OpenRouter
+(default), OpenAI, or a self-hosted gateway just by changing `llm-base-url` and
+`llm-model`. If `llm-api-token` is unset, the agent skips the LLM and files a
+templated issue instead.
 
 ```bash
 # OpenRouter (default) — access many models behind one key

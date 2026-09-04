@@ -2,7 +2,7 @@
 # Copyright 2026 Ubuntu
 # See LICENSE file for licensing details.
 
-"""InfinityCharms base (template) charm.
+"""InfiniCharms base (template) charm.
 
 A workload-less, infrastructure-agnostic, self-healing template charm. It bakes
 in three capabilities (see PLAN.md):
@@ -25,13 +25,13 @@ import sys
 
 import ops
 
-from infinitycharms import failure_agent, monitor, updater
-from infinitycharms.exceptions import NotImplementedFeature
+from infinicharms import failure_agent, monitor, updater
+from infinicharms.exceptions import NotImplementedFeature
 
 logger = logging.getLogger(__name__)
 
 
-class InfinityCharmsBaseCharm(ops.CharmBase):
+class InfiniCharmsBaseCharm(ops.CharmBase):
     """The base template charm."""
 
     def __init__(self, framework: ops.Framework):
@@ -155,7 +155,7 @@ def main() -> None:
     See PLAN.md §2.1.
     """
     try:
-        ops.main(InfinityCharmsBaseCharm)
+        ops.main(InfiniCharmsBaseCharm)
     except Exception:  # noqa: BLE001 - deliberately catch-all, then re-raise
         try:
             failure_agent.run(_agent_config_from_env(), sys.exc_info())
@@ -165,7 +165,7 @@ def main() -> None:
 
 
 # Re-export so scaffolded charms can `raise NotImplementedFeature(...)`.
-__all__ = ["InfinityCharmsBaseCharm", "NotImplementedFeature", "main"]
+__all__ = ["InfiniCharmsBaseCharm", "NotImplementedFeature", "main"]
 
 
 if __name__ == "__main__":  # pragma: nocover

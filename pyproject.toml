@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 [project]
-name = "infinitycharms-base"
+name = "infinicharms-base"
 version = "0.0.1"
 requires-python = ">=3.10"
 
@@ -14,10 +14,10 @@ requires-python = ">=3.10"
 # then inspect the libraries for dependencies specified in PYDEPS. List those dependencies here.
 dependencies = [
     "ops~=3.8",
-    # OpenAI-compatible client for the failure agent's LLM summarization step.
-    # Pointed at OpenRouter by default, but works with any OpenAI-compatible
-    # provider/gateway (see src/infinitycharms/llm.py).
-    "openai~=3.8",
+    # Pydantic AI drives the failure agent's LLM summarization step. We use its
+    # OpenAIChatModel pointed at OpenRouter by default, but it works with any
+    # OpenAI-compatible provider/gateway (see src/infinicharms/llm.py).
+    "pydantic-ai-slim[openai]",
 ]
 
 [dependency-groups]

@@ -10,7 +10,7 @@ machine and Kubernetes:
 1. If ``gh`` is already on ``PATH`` (or previously bootstrapped), use it.
 2. Otherwise download the official release tarball for the unit's architecture
    straight from ``github.com/cli/cli/releases`` over HTTPS (stdlib ``urllib``)
-   into ``$JUJU_CHARM_DIR/.infinitycharms/bin/gh``.
+   into ``$JUJU_CHARM_DIR/.infinicharms/bin/gh``.
 
 The fine-grained token is passed via the ``GH_TOKEN`` environment variable and
 never appears on ``argv`` or in logs.
