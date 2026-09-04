@@ -1,0 +1,96 @@
+# This file configures Charmcraft.
+# See https://documentation.ubuntu.com/charmcraft/stable/reference/files/charmcraft-yaml-file/
+#
+# InfinityCharms base (template) charm.
+#
+# This is a WORKLOAD-LESS, INFRASTRUCTURE-AGNOSTIC charm: it declares no
+# `containers:` block and does nothing that only makes sense on a single
+# substrate, so the same single `.charm` artifact deploys on both machine and
+# Kubernetes clouds. See PLAN.md §2.5.
+type: charm
+name: infinitycharms-base
+title: InfinityCharms Base
+summary: Self-healing, workload-less template charm.
+description: |
+  Base template charm for the InfinityCharms self-healing ecosystem.
+
+  It ships three baked-in capabilities: (1) a failure agent that, on any hook
+  failure, collects diagnostics, summarizes the failure with an LLM, and files a
+  GitHub issue on the monorepo; (2) a hot-patch/self-update loop that fetches the
+  latest matching release from the monorepo and swaps in the new charm code; and
+  (3) hook monitoring that records every hook run and status for context.
+
+  The charm is workload-less and infrastructure-agnostic: the same artifact
+  deploys on machine or Kubernetes clouds.
+
+  It is intended as the seed that the InfinityCharms monorepo scaffolds every new
+  charm from.
+
+base: ubuntu@24.04
+platforms:
+  amd64:
+  arm64:
+
+assumes:
+  - juju >= 3.6
+
+parts:
+  charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+
+# Charm configuration. Tokens are plain `type: string` config (not Juju secrets)
+# to keep `juju config` usage straightforward for the hackathon. They should
+# still be treated as sensitive and never printed to logs. See PLAN.md §2.7.
+config:
+  options:
+    monorepo:
+      type: string
+      description: |
+        owner/repo of the InfinityCharms monorepo, used for creating issues and
+        fetching releases (e.g. "acme/infinitycharms").
+    charm-name:
+      type: string
+      description: |
+        Subdir/charm name in the monorepo. Scopes which releases apply to this
+        unit and labels filed issues (e.g. "boo").
+    github-token:
+      type: string
+      description: |
+        Fine-grained GitHub token (monorepo-scoped) used by the failure agent to
+        create issues via the gh CLI. Sensitive.
+    llm-api-token:
+      type: string
+      description: |
+        API token for the failure agent's LLM summarization step (optional). If
+        unset, the agent falls back to templated issues. Works with any
+        OpenAI-compatible provider selected via `llm-base-url`. Sensitive.
+    llm-model:
+      type: string
+      default: "z-ai/glm-5.3-flash"
+      description: |
+        Model used for failure summarization, in the selected provider's naming
+        (e.g. OpenRouter "z-ai/glm-5.3-flash", OpenAI "gpt-4o-mini").
+    llm-base-url:
+      type: string
+      default: "https://openrouter.ai/api/v1"
+      description: |
+        Base URL of the OpenAI-compatible LLM endpoint. Change this to use a
+        different provider/gateway (e.g. "https://api.openai.com/v1" for OpenAI,
+        or a self-hosted gateway). Must speak the OpenAI chat-completions API.
+    auto-update:
+      type: boolean
+      default: true
+      description: Whether to self-patch from the latest matching release.
+    log-level:
+      type: string
+      default: "info"
+      description: |
+        Log level for the charm. One of: "debug", "info", "warning", "error",
+        "critical".
+
+# No actions: the failure agent files issues and the updater self-patches
+# automatically (on hook failure and on config-changed/update-status). Operators
+# don't need to trigger anything manually.
