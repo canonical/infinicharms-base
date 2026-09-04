@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # A pinned, known-good gh version for the offline/bootstrap path. The exact
 # version is not important for the demo; any recent release works.
-GH_VERSION = "2.62.0"
+GH_VERSION = "2.93.0"
 GH_RELEASE_URL = (
     "https://github.com/cli/cli/releases/download/v{version}/gh_{version}_linux_{arch}.tar.gz"
 )
@@ -42,6 +42,14 @@ GH_RELEASE_URL = (
 
 class GitHubError(Exception):
     """Raised when a gh invocation fails."""
+
+
+# Headers from the monorepo's "Bug" issue template (see `gh issue create -T
+# Bug -e`). ``create_bug`` splices answers in right underneath each of these.
+_BUG_TEMPLATE_CHARM_NAME_HEADER = "### Charm name"
+_BUG_TEMPLATE_WHAT_HAPPENED_HEADER = "### What happened?"
+_BUG_TEMPLATE_WHAT_EXPECTED_HEADER = "### What did you expect to happen?"
+_BUG_TEMPLATE_CHARM_VERSION_HEADER = "### Charm version (optional)"
 
 
 def _bin_dir() -> Path:
@@ -142,6 +150,118 @@ class GitHubClient:
         output = self._run(args)
         return _parse_issue_number(output)
 
+    def create_bug(
+        self,
+        title: str,
+        charm_name: str,
+        what_happened: str,
+        what_expected: str,
+        charm_version: str = "",
+    ) -> int:
+        """File a bug against the monorepo's "Bug" issue template.
+
+        Runs ``gh issue create -T Bug -e``. The ``-e`` flag makes ``gh`` write
+        the template to a temp file and open ``$EDITOR`` on it; instead of a
+        real editor, ``$EDITOR`` is pointed at a small generated script that
+        fills in the template's fields with ``sed`` and exits immediately, so
+        ``gh`` proceeds as though a human had saved and quit.
+        """
+        gh = self.ensure_gh()
+        with tempfile.TemporaryDirectory() as tmp:
+            editor_script = self._write_bug_editor_script(
+                Path(tmp),
+                title=title,
+                charm_name=charm_name,
+                what_happened=what_happened,
+                what_expected=what_expected,
+                charm_version=charm_version,
+            )
+            args = [
+                gh,
+                "issue",
+                "create",
+                "--repo",
+                self._repo,
+                "-T",
+                "Bug",
+                "-e",
+            ]
+            output = self._run(args, extra_env={"EDITOR": str(editor_script)})
+        return _parse_issue_number(output)
+
+    @staticmethod
+    def _write_bug_editor_script(
+        tmp_dir: Path,
+        *,
+        title: str,
+        charm_name: str,
+        what_happened: str,
+        what_expected: str,
+        charm_version: str,
+    ) -> Path:
+        """Write a throwaway "editor" script that fills in the Bug template.
+
+        ``gh issue create -e`` opens ``$EDITOR <tmpfile>`` on a file that looks
+        like::
+
+            [Bug]
+            <!-- ... -->
+
+            ### Charm name
+
+
+
+            ### What happened?
+            ...
+
+        Each answer is written to its own file first, so ``sed``'s ``r``
+        command can splice its contents in verbatim right after the matching
+        header/title line -- this sidesteps having to escape newlines or sed
+        metacharacters in the (arbitrary) answer text.
+        """
+        fields = {
+            "title": title,
+            "charm_name": charm_name,
+            "what_happened": what_happened,
+            "what_expected": what_expected,
+            "charm_version": charm_version,
+        }
+        field_files: dict[str, Path] = {}
+        for name, value in fields.items():
+            path = tmp_dir / f"{name}.txt"
+            # A trailing newline is required so sed's `r` command doesn't glue
+            # the last inserted line onto whatever follows it in the template.
+            # Leave genuinely empty (optional) fields as an empty file so `r`
+            # inserts nothing at all.
+            text = value or ""
+            if text and not text.endswith("\n"):
+                text += "\n"
+            path.write_text(text)
+            field_files[name] = path
+
+        def _insert_after(pattern: str, field_name: str) -> str:
+            source = field_files[field_name]
+            return f'sed -i "/^{pattern}$/r {source}" "$FILE"'
+
+        title_source = field_files["title"]
+        script_lines = [
+            "#!/bin/sh",
+            "set -e",
+            'FILE="$1"',
+            # The title is the template's first line ([Bug]); insert the real
+            # title right after it, then delete the placeholder line.
+            f'sed -i "1r {title_source}" "$FILE"',
+            'sed -i "1d" "$FILE"',
+            _insert_after(_BUG_TEMPLATE_CHARM_NAME_HEADER, "charm_name"),
+            _insert_after(_BUG_TEMPLATE_WHAT_HAPPENED_HEADER, "what_happened"),
+            _insert_after(_BUG_TEMPLATE_WHAT_EXPECTED_HEADER, "what_expected"),
+            _insert_after(_BUG_TEMPLATE_CHARM_VERSION_HEADER, "charm_version"),
+        ]
+        script_path = tmp_dir / "editor.sh"
+        script_path.write_text("\n".join(script_lines) + "\n")
+        script_path.chmod(0o755)
+        return script_path
+
     def _ensure_labels(self, labels: list[str]) -> None:
         """Create any labels that don't yet exist (best-effort, idempotent).
 
@@ -208,12 +328,19 @@ class GitHubClient:
 
     # -- internals ---------------------------------------------------------
 
-    def _run(self, args: list[str]) -> str:
+    def _run(self, args: list[str], extra_env: dict[str, str] | None = None) -> str:
         """Run a gh command with GH_TOKEN in the environment. Never logs token."""
         env = dict(os.environ)
         env["GH_TOKEN"] = self._token
         # Ensure our bootstrapped bin dir is discoverable for any child lookups.
         env["PATH"] = f"{_bin_dir()}{os.pathsep}{env.get('PATH', '')}"
+        if extra_env:
+            # GH_EDITOR/VISUAL take precedence over EDITOR in gh's own
+            # resolution order; clear them so a caller-supplied EDITOR (e.g.
+            # our generated editor script) always wins.
+            env.pop("GH_EDITOR", None)
+            env.pop("VISUAL", None)
+            env.update(extra_env)
         try:
             completed = subprocess.run(  # noqa: S603 - args are constructed, not shell
                 args,

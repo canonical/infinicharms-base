@@ -12,8 +12,8 @@ Flow (PLAN.md §6.1):
 1. Collect diagnostics.
 2. Classify (``not-implemented`` vs ``error``).
 3. Summarize with the LLM, or fall back to a templated body.
-4. De-duplicate by fingerprint: comment on an existing open issue, else create a
-   new one with ``charm:<name>``, ``type:*`` and ``severity:*`` labels.
+4. De-duplicate by fingerprint: comment on an existing open issue, else file a
+   new one.
 """
 
 from __future__ import annotations
@@ -165,20 +165,10 @@ def _summarize(
         )
 
 
-def _labels(charm_name: str | None, classification: str, severity: str) -> list[str]:
-    labels = [f"type:{classification}"]
-    if charm_name:
-        labels.append(f"charm:{charm_name}")
-    if severity and severity != "unknown":
-        labels.append(f"severity:{severity}")
-    return labels
-
-
 def _file_or_update_issue(
     config: AgentConfig,
     diag: diagnostics.Diagnostics,
     result: LLMResult,
-    classification: str,
     st: state.State,
 ) -> dict[str, object]:
     """Create a new issue or comment on the existing open one (de-dup).
@@ -203,12 +193,19 @@ def _file_or_update_issue(
         logger.info("Commented on existing issue #%s for fingerprint %s", existing, fingerprint)
         return {"outcome": "commented", "issue": existing}
 
-    labels = _labels(config.charm_name, classification, result.severity)
-    number = client.create_issue(result.title, result.body, labels=labels)
+    number = client.create_bug(
+        title=result.title,
+        charm_name=config.charm_name or diag.charm_name or "unknown",
+        what_happened=result.body,
+        what_expected=(
+            "N/A -- this issue was filed automatically by the InfiniCharms failure agent."
+        ),
+        charm_version=diag.applied_tag or "",
+    )
     st.record_issue(fingerprint, number)
     st.save()
     logger.info("Filed issue #%s for fingerprint %s", number, fingerprint)
-    return {"outcome": "filed", "issue": number, "labels": labels}
+    return {"outcome": "filed", "issue": number}
 
 
 def run(config: AgentConfig, exc_info: tuple | None) -> None:
@@ -261,7 +258,7 @@ def run(config: AgentConfig, exc_info: tuple | None) -> None:
         st.save()
         monitor.record("failed", status=diag.exception_type, hook=diag.hook)
 
-        outcome = _file_or_update_issue(config, diag, result, classification, st)
+        outcome = _file_or_update_issue(config, diag, result, st)
         _record_agent_run(st, diag, classification, outcome)
     except GitHubError as exc:
         logger.warning("Failure agent could not file issue: %s", exc)

@@ -35,9 +35,9 @@ def test_run_files_new_issue(monkeypatch, tmp_path):
         def issue_is_open(self, number):
             return False
 
-        def create_issue(self, title, body, labels=None):
+        def create_bug(self, title, charm_name, what_happened, what_expected, charm_version=""):
             created["title"] = title
-            created["labels"] = labels
+            created["charm_name"] = charm_name
             return 101
 
         def comment_issue(self, number, body):
@@ -51,8 +51,7 @@ def test_run_files_new_issue(monkeypatch, tmp_path):
     st = state.State.load()
     assert 101 in st.issues.values()
     assert created["title"]
-    assert "charm:boo" in created["labels"]
-    assert "type:error" in created["labels"]
+    assert created["charm_name"] == "boo"
     # The agent's own outcome is recorded for debuggability.
     assert st.last_agent_run is not None
     assert st.last_agent_run["outcome"] == "filed"
@@ -73,7 +72,7 @@ def test_run_records_failed_agent_run_on_github_error(monkeypatch, tmp_path):
         def issue_is_open(self, number):
             return False
 
-        def create_issue(self, title, body, labels=None):
+        def create_bug(self, title, charm_name, what_happened, what_expected, charm_version=""):
             raise GitHubError("gh failed (1): Could not resolve to a Repository")
 
         def comment_issue(self, number, body):
@@ -118,7 +117,7 @@ def test_run_comments_on_existing_open_issue(monkeypatch, tmp_path):
         def issue_is_open(self, number):
             return True
 
-        def create_issue(self, title, body, labels=None):
+        def create_bug(self, title, charm_name, what_happened, what_expected, charm_version=""):
             events["created"] = True
             return 999
 
@@ -159,12 +158,10 @@ def test_summarize_uses_llm(monkeypatch, tmp_path):
     assert result.severity == "high"
 
 
-def _run_capturing_labels(monkeypatch, tmp_path, exc, llm_result):
-    """Run the agent with a stubbed LLM + GitHub and return the issue labels."""
+def _run_capturing_classification(monkeypatch, tmp_path, exc, llm_result):
+    """Run the agent with a stubbed LLM + GitHub and return the recorded classification."""
     monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
     monkeypatch.setenv("JUJU_DISPATCH_PATH", "hooks/db-relation-changed")
-
-    captured = {}
 
     class FakeGH:
         def __init__(self, repo, token):
@@ -173,8 +170,7 @@ def _run_capturing_labels(monkeypatch, tmp_path, exc, llm_result):
         def issue_is_open(self, number):
             return False
 
-        def create_issue(self, title, body, labels=None):
-            captured["labels"] = labels
+        def create_bug(self, title, charm_name, what_happened, what_expected, charm_version=""):
             return 1
 
         def comment_issue(self, number, body):
@@ -193,11 +189,12 @@ def _run_capturing_labels(monkeypatch, tmp_path, exc, llm_result):
         monorepo="acme/mono", charm_name="boo", github_token="tok", llm_api_token="k"
     )
     failure_agent.run(config, _exc_info(exc))
-    return captured["labels"]
+    st = state.State.load()
+    return st.last_agent_run["classification"]
 
 
 def test_llm_overrides_heuristic_to_not_implemented(monkeypatch, tmp_path):
-    """LLM labels an unexpected AttributeError as not-implemented.
+    """LLM classifies an unexpected AttributeError as not-implemented.
 
     Even though no ``NotImplementedFeature`` was raised, the LLM's verdict wins.
     """
@@ -207,11 +204,10 @@ def test_llm_overrides_heuristic_to_not_implemented(monkeypatch, tmp_path):
         severity="medium",
         classification="not-implemented",
     )
-    labels = _run_capturing_labels(
+    classification = _run_capturing_classification(
         monkeypatch, tmp_path, AttributeError("no attr 'relation'"), result
     )
-    assert "type:not-implemented" in labels
-    assert "type:error" not in labels
+    assert classification == "not-implemented"
 
 
 def test_llm_overrides_heuristic_to_error(monkeypatch, tmp_path):
@@ -225,16 +221,19 @@ def test_llm_overrides_heuristic_to_error(monkeypatch, tmp_path):
         severity="high",
         classification="error",
     )
-    labels = _run_capturing_labels(monkeypatch, tmp_path, NotImplementedFeature("db"), result)
-    assert "type:error" in labels
-    assert "type:not-implemented" not in labels
+    classification = _run_capturing_classification(
+        monkeypatch, tmp_path, NotImplementedFeature("db"), result
+    )
+    assert classification == "error"
 
 
 def test_unknown_llm_classification_falls_back_to_heuristic(monkeypatch, tmp_path):
-    """When the LLM declines to classify, labeling uses the type-based heuristic."""
+    """When the LLM declines to classify, the heuristic classification is used."""
     result = LLMResult(title="t", body="b", severity="low", classification="unknown")
-    labels = _run_capturing_labels(monkeypatch, tmp_path, NotImplementedFeature("db"), result)
-    assert "type:not-implemented" in labels
+    classification = _run_capturing_classification(
+        monkeypatch, tmp_path, NotImplementedFeature("db"), result
+    )
+    assert classification == "not-implemented"
 
 
 def test_fallback_template_uses_heuristic_classification(monkeypatch, tmp_path):

@@ -1,6 +1,10 @@
 # Copyright 2026 Ubuntu
 # See LICENSE file for licensing details.
 
+import os
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from infinicharms import github_client
@@ -91,6 +95,119 @@ def test_label_color():
     assert github_client._label_color("charm:boo") == "0e8a16"
     assert github_client._label_color("severity:high") == "fbca04"
     assert github_client._label_color("weird") == "ededed"
+
+
+BUG_TEMPLATE = (
+    "[Bug]\n"
+    "<!--\n"
+    "Thanks for reporting a bug! This will be picked up automatically by an\n"
+    "agent that will investigate, comment a plan on this issue, and open a PR\n"
+    "with a fix (or close the issue if no change is needed).\n"
+    "-->\n"
+    "\n"
+    "### Charm name\n"
+    "\n"
+    "\n"
+    "\n"
+    "### What happened?\n"
+    "\n"
+    "\n"
+    "\n"
+    "### What did you expect to happen?\n"
+    "\n"
+    "\n"
+    "\n"
+    "### Charm version (optional)\n"
+    "\n"
+    "------------------------ >8 ------------------------\n"
+    "\n"
+    "Please Enter the title on the first line and the body on subsequent lines.\n"
+    "Lines below dotted lines will be ignored, and an empty title aborts the creation process.\n"
+)
+
+
+def test_bug_editor_script_fills_in_template(tmp_path):
+    """The generated editor script fills in each field via sed, in place."""
+    template_file = tmp_path / "issue.md"
+    template_file.write_text(BUG_TEMPLATE)
+
+    script = GitHubClient._write_bug_editor_script(
+        tmp_path,
+        title="charm boo: db-relation-changed failed",
+        charm_name="boo",
+        what_happened="The relation handler raised a KeyError.\nSecond line.",
+        what_expected="It should not crash.",
+        charm_version="1.2.3",
+    )
+    subprocess.run(["sh", str(script), str(template_file)], check=True)
+
+    result = template_file.read_text()
+    lines = result.splitlines()
+    assert lines[0] == "charm boo: db-relation-changed failed"
+
+    assert "### Charm name\nboo" in result
+    assert "### What happened?\nThe relation handler raised a KeyError.\nSecond line." in result
+    assert "### What did you expect to happen?\nIt should not crash." in result
+    assert "### Charm version (optional)\n1.2.3" in result
+    # The separator and trailing instructions are left untouched.
+    assert "------------------------ >8 ------------------------" in result
+
+
+def test_bug_editor_script_leaves_optional_version_blank(tmp_path):
+    """An empty charm_version doesn't corrupt the template."""
+    template_file = tmp_path / "issue.md"
+    template_file.write_text(BUG_TEMPLATE)
+
+    script = GitHubClient._write_bug_editor_script(
+        tmp_path,
+        title="t",
+        charm_name="boo",
+        what_happened="h",
+        what_expected="e",
+        charm_version="",
+    )
+    subprocess.run(["sh", str(script), str(template_file)], check=True)
+
+    result = template_file.read_text()
+    assert "### Charm version (optional)\n\n------------------------" in result
+
+
+def test_create_bug_uses_env_token_and_editor(monkeypatch, tmp_path):
+    """create_bug drives gh issue create -T Bug -e via a generated $EDITOR script."""
+    calls = []
+    editor_existed = {}
+
+    def fake_run(self, args, extra_env=None):
+        calls.append(args)
+        if "create" in args and "issue" in args:
+            # The editor script must exist (and be executable) while gh would
+            # be invoking it, i.e. for the duration of this call.
+            editor_existed["exists"] = Path(extra_env["EDITOR"]).exists()
+            editor_existed["executable"] = os.access(extra_env["EDITOR"], os.X_OK)
+            return "https://github.com/acme/mono/issues/11\n"
+        return ""
+
+    monkeypatch.setattr(GitHubClient, "ensure_gh", lambda self: "/usr/bin/gh")
+    monkeypatch.setattr(GitHubClient, "_run", fake_run)
+
+    client = GitHubClient("acme/mono", "tok-secret")
+    number = client.create_bug(
+        title="title",
+        charm_name="boo",
+        what_happened="it broke",
+        what_expected="it should work",
+        charm_version="1.0",
+    )
+    assert number == 11
+
+    issue_args = [a for a in calls if "issue" in a and "create" in a][0]
+    assert "-T" in issue_args
+    assert "Bug" in issue_args
+    assert "-e" in issue_args
+    assert "--label" not in issue_args
+    assert "tok-secret" not in " ".join(issue_args)
+    assert editor_existed["exists"]
+    assert editor_existed["executable"]
 
 
 def test_arch_mapping(monkeypatch):
