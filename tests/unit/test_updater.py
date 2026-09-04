@@ -112,9 +112,10 @@ def test_bad_zip_raises(monkeypatch, tmp_path):
 
 
 def test_apply_is_idempotent_across_dispatches(monkeypatch, tmp_path):
-    """Two separate hook dispatches against the same charm dir: the first
-    applies the release, the second (a brand-new ``Updater``, modeling a fresh
-    hook process) no-ops because ``.infinicharms/state.json`` persisted the
+    """Two separate hook dispatches against the same charm dir are idempotent.
+
+    The first applies the release, the second (a brand-new ``Updater``, modeling
+    a fresh hook process) no-ops because ``.infinicharms/state.json`` persisted the
     applied tag to disk. This is the persistence contract PLAN.md §2.4 relies
     on for the "fail -> self-update -> next dispatch succeeds" recovery loop.
     """

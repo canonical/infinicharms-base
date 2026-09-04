@@ -139,8 +139,10 @@ def test_agent_config_from_env_reads_all_fields(monkeypatch):
 
 
 def test_recovery_loop_fail_then_succeed(monkeypatch, tmp_path):
-    """Model the loop: dispatch 1 fails (agent notified, unit would go `error`);
-    dispatch 2 (a fresh process, per PLAN.md §2.4) runs patched code and succeeds.
+    """Model the recovery loop across two separate hook dispatches.
+
+    Dispatch 1 fails (agent notified, unit would go `error`); dispatch 2 (a
+    fresh process, per PLAN.md §2.4) runs patched code and succeeds.
 
     Each call to ``main()`` here stands in for one *separate* Juju hook dispatch
     (i.e. a fresh Python process in reality). We can't literally re-exec a new
