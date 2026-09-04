@@ -1,0 +1,42 @@
+<!--
+Fallback issue body template (Python str.format style), used when the LLM is
+unavailable or fails. Ensures the failure signal is never lost. See PLAN.md §2.6.
+
+This file is a LOCAL DEFAULT. The authoritative copy is expected to come from the
+monorepo: when the updater applies a released `.charm`, it overwrites `prompts/`
+(and `SOUL.md`) under $JUJU_CHARM_DIR, so the monorepo can ship its own version.
+Until the monorepo is set up, this default is used.
+
+Placeholders:
+  {classification}    {charm_name}   {hook}        {substrate}
+  {applied_tag}       {timestamp}    {exception_type}
+  {exception_message} {traceback}    {recent_hooks}
+-->
+## Summary
+
+Automated failure report from the InfiniCharms base charm (LLM summarization
+was unavailable, so this is the raw collected context).
+
+- **classification**: `{classification}`
+- **charm**: `{charm_name}`
+- **hook**: `{hook}`
+- **substrate**: `{substrate}`
+- **applied release tag**: `{applied_tag}`
+- **time (UTC)**: `{timestamp}`
+
+## Exception
+
+- **type**: `{exception_type}`
+- **message**: {exception_message}
+
+## Traceback
+
+```
+{traceback}
+```
+
+## Recent hook runs (newest last)
+
+```json
+{recent_hooks}
+```
