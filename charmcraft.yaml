@@ -91,6 +91,13 @@ config:
         Log level for the charm. One of: "debug", "info", "warning", "error",
         "critical".
 
-# No actions: the failure agent files issues and the updater self-patches
-# automatically (on hook failure and on config-changed/update-status). Operators
-# don't need to trigger anything manually.
+# The failure agent files issues and the updater self-patches automatically (on
+# hook failure and on config-changed/update-status). The one action below is a
+# read-only introspection helper for debugging the agent itself.
+actions:
+  agent-status:
+    description: |
+      Report the failure agent's most recent outcome (did it file/comment/skip/
+      fail an issue, and why), plus the most recent hook failure it saw. This
+      reads the persisted `.infinicharms/state.json` and makes no changes. Use
+      it to answer "how did the agent do?" without needing `juju ssh`.

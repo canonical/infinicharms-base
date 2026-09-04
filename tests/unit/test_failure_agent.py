@@ -53,6 +53,55 @@ def test_run_files_new_issue(monkeypatch, tmp_path):
     assert created["title"]
     assert "charm:boo" in created["labels"]
     assert "type:error" in created["labels"]
+    # The agent's own outcome is recorded for debuggability.
+    assert st.last_agent_run is not None
+    assert st.last_agent_run["outcome"] == "filed"
+    assert st.last_agent_run["issue"] == 101
+
+
+def test_run_records_failed_agent_run_on_github_error(monkeypatch, tmp_path):
+    """When gh fails, the agent records outcome=failed with the error."""
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    monkeypatch.setenv("JUJU_DISPATCH_PATH", "hooks/install")
+
+    from infinicharms.github_client import GitHubError
+
+    class FakeGH:
+        def __init__(self, repo, token):
+            pass
+
+        def issue_is_open(self, number):
+            return False
+
+        def create_issue(self, title, body, labels=None):
+            raise GitHubError("gh failed (1): Could not resolve to a Repository")
+
+        def comment_issue(self, number, body):
+            pass
+
+    monkeypatch.setattr(failure_agent, "GitHubClient", FakeGH)
+    config = failure_agent.AgentConfig(monorepo="acme/nope", charm_name="boo", github_token="tok")
+    failure_agent.run(config, _exc_info(ValueError("boom")))
+
+    st = state.State.load()
+    assert st.issues == {}
+    assert st.last_agent_run is not None
+    assert st.last_agent_run["outcome"] == "failed"
+    assert st.last_agent_run["error_type"] == "GitHubError"
+    assert "Could not resolve" in str(st.last_agent_run["error_message"])
+
+
+def test_run_records_skipped_when_config_missing(monkeypatch, tmp_path):
+    """Without monorepo/github-token the agent records outcome=skipped."""
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    monkeypatch.setenv("JUJU_DISPATCH_PATH", "hooks/install")
+
+    config = failure_agent.AgentConfig(charm_name="boo")  # no monorepo/token
+    failure_agent.run(config, _exc_info(ValueError("boom")))
+
+    st = state.State.load()
+    assert st.last_agent_run is not None
+    assert st.last_agent_run["outcome"] == "skipped"
 
 
 def test_run_comments_on_existing_open_issue(monkeypatch, tmp_path):

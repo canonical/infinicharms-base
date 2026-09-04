@@ -44,6 +44,8 @@ class InfiniCharmsBaseCharm(ops.CharmBase):
         framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         # Status collection (fires only after a successful hook).
         framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
+        # Introspection action for debugging the failure agent itself.
+        framework.observe(self.on["agent-status"].action, self._on_agent_status_action)
 
     # -- helpers -----------------------------------------------------------
 
@@ -95,6 +97,25 @@ class InfiniCharmsBaseCharm(ops.CharmBase):
     def _on_upgrade_charm(self, event: ops.UpgradeCharmEvent) -> None:
         """Handle a Juju-driven upgrade (durable path, complements Option A)."""
         monitor.record("started", hook="upgrade-charm")
+
+    def _on_agent_status_action(self, event: ops.ActionEvent) -> None:
+        """Report the failure agent's most recent outcome (read-only).
+
+        Surfaces ``.infinicharms/state.json`` so operators can see how the agent
+        did (filed/commented/skipped/failed and why) without ``juju ssh``.
+        """
+        from infinicharms import state
+
+        st = state.State.load()
+        last_agent_run = st.last_agent_run or {}
+        event.set_results(
+            {
+                "last-agent-run": json.dumps(last_agent_run, sort_keys=True),
+                "last-failure": json.dumps(st.last_failure or {}, sort_keys=True),
+                "outcome": str(last_agent_run.get("outcome", "none")),
+                "filed-issues": json.dumps(st.issues, sort_keys=True),
+            }
+        )
 
     def _on_collect_unit_status(self, event: ops.CollectStatusEvent) -> None:
         """Report unit status after a successful hook.

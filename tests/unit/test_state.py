@@ -17,6 +17,16 @@ def test_state_roundtrip(tmp_path):
     assert loaded.issue_for("missing") is None
 
 
+def test_state_persists_last_agent_run(tmp_path):
+    """The agent's own outcome snapshot round-trips."""
+    path = tmp_path / "state.json"
+    st = state.State(last_agent_run={"outcome": "failed", "error_type": "GitHubError"})
+    st.save(path)
+
+    loaded = state.State.load(path)
+    assert loaded.last_agent_run == {"outcome": "failed", "error_type": "GitHubError"}
+
+
 def test_state_missing_file_defaults(tmp_path):
     """Loading a non-existent state file returns defaults."""
     loaded = state.State.load(tmp_path / "nope.json")

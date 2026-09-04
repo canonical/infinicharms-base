@@ -116,8 +116,16 @@ class GitHubClient:
     # -- issue operations --------------------------------------------------
 
     def create_issue(self, title: str, body: str, labels: list[str] | None = None) -> int:
-        """Create an issue and return its number."""
+        """Create an issue and return its number.
+
+        The agent uses custom labels (``type:*``, ``charm:*``, ``severity:*``)
+        that may not exist in the target monorepo. ``gh issue create`` fails hard
+        on an unknown label, so we ensure each label exists first (idempotently)
+        before creating the issue. See DEBUGGING.md ("could not add label").
+        """
         gh = self.ensure_gh()
+        wanted = labels or []
+        self._ensure_labels(wanted)
         args = [
             gh,
             "issue",
@@ -129,10 +137,38 @@ class GitHubClient:
             "--body",
             body,
         ]
-        for label in labels or []:
+        for label in wanted:
             args += ["--label", label]
         output = self._run(args)
         return _parse_issue_number(output)
+
+    def _ensure_labels(self, labels: list[str]) -> None:
+        """Create any labels that don't yet exist (best-effort, idempotent).
+
+        ``gh label create --force`` upserts, so it never fails if the label
+        already exists. A failure to create a label (e.g. token lacks the scope)
+        is logged and swallowed so we still attempt to file the issue -- an issue
+        with fewer labels is better than no issue at all.
+        """
+        gh = self.ensure_gh()
+        for label in labels:
+            args = [
+                gh,
+                "label",
+                "create",
+                label,
+                "--repo",
+                self._repo,
+                "--color",
+                _label_color(label),
+                "--description",
+                "Created by the InfiniCharms failure agent",
+                "--force",
+            ]
+            try:
+                self._run(args)
+            except GitHubError as exc:
+                logger.warning("Could not ensure label %r (continuing): %s", label, exc)
 
     def comment_issue(self, issue_number: int, body: str) -> None:
         """Add a comment to an existing issue."""
@@ -191,6 +227,16 @@ class GitHubClient:
         except subprocess.CalledProcessError as exc:
             raise GitHubError(f"gh failed ({exc.returncode}): {exc.stderr.strip()}") from exc
         return completed.stdout
+
+
+def _label_color(label: str) -> str:
+    """Pick a stable 6-hex color for a label based on its namespace."""
+    prefix = label.split(":", 1)[0]
+    return {
+        "type": "d73a4a",  # red-ish
+        "charm": "0e8a16",  # green
+        "severity": "fbca04",  # amber
+    }.get(prefix, "ededed")
 
 
 def _find_gh_member(archive: tarfile.TarFile) -> tarfile.TarInfo | None:

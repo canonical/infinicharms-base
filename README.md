@@ -79,10 +79,119 @@ namespaces like `z-ai/glm-5.3-flash`, or OpenAI names like `gpt-4o-mini`).
 
 ## Actions
 
-The charm exposes **no actions**. The failure agent files issues and the updater
-self-patches automatically — on any hook failure and on
-`config-changed`/`update-status` — so operators don't need to trigger anything
-manually.
+| Action | Purpose |
+|--------|---------|
+| `agent-status` | **Read-only.** Report the failure agent's most recent outcome (`filed` / `commented` / `skipped` / `failed`, with the issue number or error), the last hook failure it saw, and the fingerprint→issue ledger. Reads `.infinicharms/state.json`; makes no changes. |
+
+Everything else is automatic: the failure agent files issues on any hook failure
+and the updater self-patches on `config-changed`/`update-status`, so operators
+don't normally trigger anything manually. See `DEBUGGING.md` for how to use
+`agent-status` to diagnose the agent itself.
+
+## Demo: failure agent files a `not-implemented` issue from an unexpected error
+
+This walkthrough shows the end-to-end self-healing loop: a charm built on this
+base **forgets to fully implement a relation**, an *unexpected* exception escapes
+a hook, and the failure agent reasons about it and files a GitHub issue on the
+monorepo — **without anyone raising `NotImplementedFeature`**.
+
+To reproduce it, add a deliberately half-implemented PostgreSQL relation *on top
+of the base* (this mimics a downstream author's mistake — the base itself ships
+no such relation). Its `database-relation-changed` handler reaches straight for
+the provider's `endpoints` field without first negotiating a database name, so
+the key is missing and it raises a plain `KeyError`.
+
+### Prerequisites
+
+- A Juju controller (machine or Kubernetes) and a bootstrapped model.
+- A GitHub **fine-grained token** with `issues:write` (and label-create
+  permission) on your monorepo.
+- Optionally, an LLM API token (OpenRouter by default). Without it, the agent
+  still files a *templated* issue.
+
+### Steps
+
+First, add the demo relation. In `charmcraft.yaml`, declare the requirer:
+
+```yaml
+requires:
+  database:
+    interface: postgresql_client
+    optional: true
+```
+
+In `src/charm.py`, observe it with a half-implemented handler (in `__init__`):
+
+```python
+framework.observe(
+    self.on["database"].relation_changed, self._on_database_relation_changed
+)
+```
+
+```python
+def _on_database_relation_changed(self, event: ops.RelationChangedEvent) -> None:
+    # Reaches for 'endpoints' without negotiating a database first -> KeyError,
+    # an *unexpected* exception (NOT a NotImplementedFeature).
+    endpoints = event.relation.data[event.app]["endpoints"]
+    logger.info("connecting to postgresql at %s", endpoints)
+```
+
+Then build, deploy, and trigger the failure:
+
+```bash
+# 1. Build the charm (with the demo relation added above).
+charmcraft pack
+
+# 2. Deploy it with the required config. Use real values.
+juju deploy ./infinicharms-base_amd64.charm \
+  --config monorepo="<owner>/<repo>" \
+  --config charm-name="boo" \
+  --config github-token="<gh-fine-grained-token>" \
+  --config llm-api-token="<openrouter-or-openai-token>"   # optional
+
+# 3. Deploy a real PostgreSQL provider.
+#    Kubernetes:
+juju deploy postgresql-k8s --channel 14/stable --trust
+#    Machine (instead of the above):
+# juju deploy postgresql --channel 14/stable
+
+# 4. Integrate — this fires `database-relation-changed` on our unit, which
+#    raises KeyError('endpoints') and drives the unit into `error`.
+juju integrate infinicharms-base:database postgresql-k8s:database
+
+# 5. Watch the unit go into error on the failing hook.
+juju status --relations
+```
+
+### Verify the agent did its job
+
+```bash
+# Ask the agent how it did (no juju ssh needed):
+juju run infinicharms-base/0 agent-status
+```
+
+Expected results on success:
+
+- `outcome: filed` (or `commented` on a repeat), with an `issue` number.
+- `last-failure` shows `KeyError: 'endpoints'` on `database-relation-changed`.
+- A new issue appears on your monorepo, labeled `charm:boo`, `type:*`
+  (`type:not-implemented` when the LLM reasons it's a missing-feature gap), and
+  `severity:*`. Missing labels are created automatically.
+
+If `outcome: failed`, the `error_message` tells you why — see `DEBUGGING.md`
+(common causes: wrong `monorepo`, token lacking permissions, no network egress).
+
+### Reset / re-run
+
+```bash
+juju remove-relation infinicharms-base:database postgresql-k8s:database
+juju resolved infinicharms-base/0        # clear the error state
+juju integrate infinicharms-base:database postgresql-k8s:database   # trigger again
+```
+
+> The de-dup ledger means a second identical failure **comments on the existing
+> open issue** instead of opening a duplicate — `agent-status` will then report
+> `outcome: commented`.
 
 ## Development
 

@@ -51,11 +51,18 @@ class State:
         issues: Mapping of failure fingerprint -> filed GitHub issue number.
         last_failure: A small snapshot of the most recent failure, kept for
             diagnostics/context.
+        last_agent_run: A small snapshot of the *failure agent's own* most recent
+            outcome (did it file/comment/skip/fail, and why). This is distinct
+            from ``last_failure`` (which describes the hook that broke) and is
+            what you inspect to answer "how did the agent do?" -- see the
+            ``outcome`` field, which is one of ``filed``, ``commented``,
+            ``skipped`` or ``failed``.
     """
 
     applied_tag: str | None = None
     issues: dict[str, int] = field(default_factory=dict)
     last_failure: dict[str, object] | None = None
+    last_agent_run: dict[str, object] | None = None
 
     @classmethod
     def load(cls, path: Path | None = None) -> State:
@@ -72,6 +79,7 @@ class State:
             applied_tag=raw.get("applied_tag"),
             issues={str(k): int(v) for k, v in (raw.get("issues") or {}).items()},
             last_failure=raw.get("last_failure"),
+            last_agent_run=raw.get("last_agent_run"),
         )
 
     def save(self, path: Path | None = None) -> None:

@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from types import TracebackType
 
@@ -179,11 +180,16 @@ def _file_or_update_issue(
     result: LLMResult,
     classification: str,
     st: state.State,
-) -> None:
-    """Create a new issue or comment on the existing open one (de-dup)."""
+) -> dict[str, object]:
+    """Create a new issue or comment on the existing open one (de-dup).
+
+    Returns a small outcome dict (``outcome`` is one of ``filed``, ``commented``
+    or ``skipped``) so the caller can persist how the agent actually did. A
+    ``GitHubError`` propagates to the caller, which records an ``outcome=failed``.
+    """
     if not (config.monorepo and config.github_token):
         logger.warning("Missing monorepo/github-token; cannot file issue")
-        return
+        return {"outcome": "skipped", "reason": "missing monorepo/github-token"}
     client = GitHubClient(config.monorepo, config.github_token)
     fingerprint = diag.fingerprint
     existing = st.issue_for(fingerprint)
@@ -195,13 +201,14 @@ def _file_or_update_issue(
         )
         client.comment_issue(existing, comment)
         logger.info("Commented on existing issue #%s for fingerprint %s", existing, fingerprint)
-        return
+        return {"outcome": "commented", "issue": existing}
 
     labels = _labels(config.charm_name, classification, result.severity)
     number = client.create_issue(result.title, result.body, labels=labels)
     st.record_issue(fingerprint, number)
     st.save()
     logger.info("Filed issue #%s for fingerprint %s", number, fingerprint)
+    return {"outcome": "filed", "issue": number, "labels": labels}
 
 
 def run(config: AgentConfig, exc_info: tuple | None) -> None:
@@ -254,8 +261,47 @@ def run(config: AgentConfig, exc_info: tuple | None) -> None:
         st.save()
         monitor.record("failed", status=diag.exception_type, hook=diag.hook)
 
-        _file_or_update_issue(config, diag, result, classification, st)
+        outcome = _file_or_update_issue(config, diag, result, classification, st)
+        _record_agent_run(st, diag, classification, outcome)
     except GitHubError as exc:
         logger.warning("Failure agent could not file issue: %s", exc)
-    except Exception:  # noqa: BLE001 - agent must never mask the original error
+        _safe_record_failed_agent_run("GitHubError", str(exc))
+    except Exception as exc:  # noqa: BLE001 - agent must never mask the original error
         logger.exception("Failure agent crashed (suppressed)")
+        _safe_record_failed_agent_run(type(exc).__name__, str(exc))
+
+
+def _record_agent_run(
+    st: state.State,
+    diag: diagnostics.Diagnostics,
+    classification: str,
+    outcome: dict[str, object],
+) -> None:
+    """Persist a snapshot of the agent's own outcome to ``last_agent_run``."""
+    st.last_agent_run = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "hook": diag.hook,
+        "classification": classification,
+        "fingerprint": diag.fingerprint,
+        **outcome,
+    }
+    st.save()
+
+
+def _safe_record_failed_agent_run(error_type: str, error_message: str) -> None:
+    """Best-effort record that the agent itself failed. Never raises.
+
+    Used from the exception handlers, where we may not have a fully-built state
+    object; we reload from disk so we don't clobber other fields.
+    """
+    try:
+        st = state.State.load()
+        st.last_agent_run = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "outcome": "failed",
+            "error_type": error_type,
+            "error_message": error_message,
+        }
+        st.save()
+    except Exception:  # noqa: BLE001 - recording must never mask the original error
+        logger.exception("Could not record failed agent run (suppressed)")
