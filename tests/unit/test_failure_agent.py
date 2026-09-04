@@ -176,9 +176,7 @@ def test_llm_overrides_heuristic_to_error(monkeypatch, tmp_path):
         severity="high",
         classification="error",
     )
-    labels = _run_capturing_labels(
-        monkeypatch, tmp_path, NotImplementedFeature("db"), result
-    )
+    labels = _run_capturing_labels(monkeypatch, tmp_path, NotImplementedFeature("db"), result)
     assert "type:error" in labels
     assert "type:not-implemented" not in labels
 
@@ -186,9 +184,7 @@ def test_llm_overrides_heuristic_to_error(monkeypatch, tmp_path):
 def test_unknown_llm_classification_falls_back_to_heuristic(monkeypatch, tmp_path):
     """When the LLM declines to classify, labeling uses the type-based heuristic."""
     result = LLMResult(title="t", body="b", severity="low", classification="unknown")
-    labels = _run_capturing_labels(
-        monkeypatch, tmp_path, NotImplementedFeature("db"), result
-    )
+    labels = _run_capturing_labels(monkeypatch, tmp_path, NotImplementedFeature("db"), result)
     assert "type:not-implemented" in labels
 
 

@@ -240,9 +240,7 @@ def run(config: AgentConfig, exc_info: tuple | None) -> None:
         if result.classification in ("not-implemented", "error"):
             classification = result.classification
             if classification != heuristic:
-                logger.info(
-                    "LLM reclassified failure %s -> %s", heuristic, classification
-                )
+                logger.info("LLM reclassified failure %s -> %s", heuristic, classification)
 
         # Record the most recent failure snapshot for diagnostics/context.
         st.last_failure = {
