@@ -59,6 +59,7 @@ config:
   options:
     monorepo:
       type: string
+      default: "canonical/infinicharms"
       description: |
         owner/repo of the InfiniCharms monorepo, used for creating issues and
         fetching releases (e.g. "acme/infinicharms").
