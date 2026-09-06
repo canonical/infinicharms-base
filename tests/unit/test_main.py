@@ -179,3 +179,181 @@ def test_recovery_loop_fail_then_succeed(monkeypatch, tmp_path):
     # Dispatch 2: patched code path succeeds; agent must not run again.
     charm_module.main()
     assert agent_calls == ["RuntimeError"]
+
+
+def test_config_get_bool_parses_json_value(monkeypatch):
+    """_config_get_bool shells out to `config-get --format=json` and parses it."""
+
+    class FakeCompleted:
+        stdout = "false\n"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: FakeCompleted())
+    assert charm_module._config_get_bool("auto-update", True) is False
+
+
+def test_config_get_bool_missing_tool_returns_default(monkeypatch):
+    """Outside a hook context, _config_get_bool degrades to the given default."""
+
+    def raise_missing(*a, **k):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(subprocess, "run", raise_missing)
+    assert charm_module._config_get_bool("auto-update", True) is True
+    assert charm_module._config_get_bool("auto-update", False) is False
+
+
+def test_maybe_self_update_skipped_when_auto_update_false(monkeypatch, tmp_path):
+    """auto-update=False must never call Updater.apply(), and is logged/recorded."""
+    import infinicharms.updater as updater
+    from infinicharms import monitor
+
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    values = {"auto-update": False, "monorepo": "acme/mono", "charm-name": "boo"}
+    monkeypatch.setattr(charm_module, "_config_get_bool", lambda key, default: values[key])
+    monkeypatch.setattr(charm_module, "_config_get", lambda key: values.get(key))
+
+    called = {"n": 0}
+    monkeypatch.setattr(
+        updater.Updater, "apply", lambda self, **kw: called.__setitem__("n", called["n"] + 1)
+    )
+    charm_module._maybe_self_update()
+    assert called["n"] == 0
+
+    entries = monitor.recent()
+    assert entries[-1]["hook"] == "self-update"
+    assert entries[-1]["outcome"] == "skipped"
+    assert entries[-1]["status"] == "auto-update disabled"
+
+
+def test_maybe_self_update_skipped_without_monorepo_or_charm_name(monkeypatch, tmp_path):
+    """Missing monorepo/charm-name must never call Updater.apply()."""
+    import infinicharms.updater as updater
+    from infinicharms import monitor
+
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    monkeypatch.setattr(charm_module, "_config_get_bool", lambda key, default: True)
+    monkeypatch.setattr(charm_module, "_config_get", lambda key: None)
+
+    called = {"n": 0}
+    monkeypatch.setattr(
+        updater.Updater, "apply", lambda self, **kw: called.__setitem__("n", called["n"] + 1)
+    )
+    charm_module._maybe_self_update()
+    assert called["n"] == 0
+
+    entries = monitor.recent()
+    assert entries[-1]["hook"] == "self-update"
+    assert entries[-1]["outcome"] == "skipped"
+    assert entries[-1]["status"] == "monorepo/charm-name not set"
+
+
+def test_maybe_self_update_failure_is_swallowed(monkeypatch, tmp_path):
+    """A self-update UpdateError must never escape _maybe_self_update(), and is recorded."""
+    import infinicharms.updater as updater
+    from infinicharms import monitor
+
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    values = {"monorepo": "acme/mono", "charm-name": "boo"}
+    monkeypatch.setattr(charm_module, "_config_get_bool", lambda key, default: True)
+    monkeypatch.setattr(charm_module, "_config_get", lambda key: values.get(key))
+
+    def raise_update_error(self, **kw):
+        raise updater.UpdateError("network unreachable")
+
+    monkeypatch.setattr(updater.Updater, "apply", raise_update_error)
+    charm_module._maybe_self_update()  # must not raise
+
+    entries = monitor.recent()
+    assert entries[-1]["hook"] == "self-update"
+    assert entries[-1]["outcome"] == "failed"
+    assert "network unreachable" in entries[-1]["status"]
+
+
+def test_maybe_self_update_applies_when_release_available(monkeypatch, tmp_path):
+    """When Updater.apply() reports an update, _maybe_self_update() logs and records it."""
+    import infinicharms.updater as updater
+    from infinicharms import monitor
+
+    monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
+    values = {"monorepo": "acme/mono", "charm-name": "boo"}
+    monkeypatch.setattr(charm_module, "_config_get_bool", lambda key, default: True)
+    monkeypatch.setattr(charm_module, "_config_get", lambda key: values.get(key))
+    monkeypatch.setattr(
+        updater.Updater,
+        "apply",
+        lambda self, **kw: {"updated": True, "applied_tag": "boo/v1.2.3"},
+    )
+    charm_module._maybe_self_update()  # must not raise
+
+    entries = monitor.recent()
+    assert entries[-1]["hook"] == "self-update"
+    assert entries[-1]["outcome"] == "updated"
+    assert entries[-1]["status"] == "boo/v1.2.3"
+
+
+def test_main_always_runs_self_update_before_dispatch(monkeypatch):
+    """main() always calls the self-updater exactly once, before ops.main()."""
+    calls = []
+    monkeypatch.setattr(charm_module, "_maybe_self_update", lambda: calls.append("update"))
+    monkeypatch.setattr(charm_module.ops, "main", lambda charm_cls: calls.append("dispatch"))
+
+    charm_module.main()
+    assert calls == ["update", "dispatch"]
+
+
+def test_main_does_not_double_report_a_failure_the_guard_already_reported(monkeypatch):
+    """If the per-hook guard already reported a failure, main() must not report it again."""
+    from infinicharms import shim
+
+    def boom(charm_cls):
+        exc = RuntimeError("already handled by the guard")
+        shim.mark_reported(exc)
+        raise exc
+
+    monkeypatch.setattr(charm_module, "_maybe_self_update", lambda: None)
+    monkeypatch.setattr(charm_module.ops, "main", boom)
+
+    called = {"n": 0}
+    monkeypatch.setattr(
+        charm_module.failure_agent, "run", lambda *a, **k: called.__setitem__("n", called["n"] + 1)
+    )
+
+    with pytest.raises(RuntimeError, match="already handled by the guard"):
+        charm_module.main()
+    assert called["n"] == 0
+
+
+def test_main_reports_unguarded_failures_via_the_outer_safety_net(monkeypatch):
+    """A failure the guard never saw is still reported by main()'s outer except."""
+    monkeypatch.setattr(charm_module, "_maybe_self_update", lambda: None)
+    monkeypatch.setattr(
+        charm_module.ops,
+        "main",
+        lambda charm_cls: (_ for _ in ()).throw(RuntimeError("not previously reported")),
+    )
+
+    called = {"n": 0}
+    monkeypatch.setattr(
+        charm_module.failure_agent, "run", lambda *a, **k: called.__setitem__("n", called["n"] + 1)
+    )
+
+    with pytest.raises(RuntimeError, match="not previously reported"):
+        charm_module.main()
+    assert called["n"] == 1
+
+
+def test_report_hook_failure_marks_exception_reported(monkeypatch):
+    """_report_hook_failure runs the agent and marks the exception as reported."""
+    from infinicharms import shim
+
+    calls = []
+    monkeypatch.setattr(
+        charm_module.failure_agent, "run", lambda config, exc_info: calls.append(exc_info)
+    )
+    try:
+        raise ValueError("boom")
+    except ValueError as exc:
+        exc_info = (type(exc), exc, exc.__traceback__)
+        charm_module._report_hook_failure(exc_info)
+        assert calls == [exc_info]
+        assert shim.already_reported(exc) is True

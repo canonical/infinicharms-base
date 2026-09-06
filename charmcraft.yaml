@@ -42,9 +42,10 @@ parts:
       - astral-uv
 
   # The `charm` (uv) plugin only copies `src/` and `lib/` into the payload.
-  # SOUL.md and prompts/ are read at runtime (failure_agent.py) and are also
-  # swap targets for the self-update loop (updater.py SWAP_TARGETS), so they
-  # must be staged into the charm root explicitly via the dump plugin.
+  # SOUL.md and prompts/ are read at runtime (failure_agent.py), and the same
+  # layout is expected inside a self-update release's unpacked `.charm` (see
+  # updater.py / infinicharms.shim), so they must be staged into the charm
+  # root explicitly via the dump plugin.
   soul-and-prompts:
     plugin: dump
     source: .

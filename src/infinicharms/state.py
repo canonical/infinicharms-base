@@ -42,6 +42,17 @@ def state_path() -> Path:
     return state_dir() / STATE_FILENAME
 
 
+def evolved_dir() -> Path:
+    """Return the directory the self-updater extracts the latest release into.
+
+    ``infinicharms.updater`` unpacks the latest matching GitHub release here in
+    full (a fresh copy of the released ``.charm``'s contents), rather than
+    overwriting anything under ``$JUJU_CHARM_DIR``. ``infinicharms.shim`` loads
+    this checkout's ``src/charm.py`` at runtime -- see PLAN.md §2.4.
+    """
+    return state_dir() / "evolved"
+
+
 @dataclass
 class State:
     """The persisted charm state.

@@ -11,7 +11,9 @@ This package contains the baked-in capabilities of the InfiniCharms base
 * :mod:`infinicharms.github_client` -- a thin wrapper around the ``gh`` CLI,
   including bootstrapping the binary on either substrate.
 * :mod:`infinicharms.updater` -- Option A hot-patch: download the latest
-  matching release, unpack it, and swap in the new charm code.
+  matching release and unpack it into ``.infinicharms/evolved``.
+* :mod:`infinicharms.shim` -- dynamically load the evolved checkout's charm
+  class and guard every observed hook/action handler for failure reporting.
 * :mod:`infinicharms.monitor` -- record every hook run and status for context.
 * :mod:`infinicharms.llm` -- a Pydantic AI chat client (OpenRouter by default,
   any OpenAI-compatible provider via ``base_url``).
@@ -27,6 +29,7 @@ from . import (
     github_client,
     llm,
     monitor,
+    shim,
     state,
     updater,
 )
@@ -38,6 +41,7 @@ __all__ = [
     "github_client",
     "llm",
     "monitor",
+    "shim",
     "state",
     "updater",
 ]

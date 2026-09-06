@@ -1,0 +1,26 @@
+{"ts": "2026-09-06T23:37:46.397881+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:37:46.399204+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:37:46.399984+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:37:46.404290+00:00", "hook": "self-update", "outcome": "skipped", "status": "auto-update disabled"}
+{"ts": "2026-09-06T23:37:46.404709+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:37:46.405240+00:00", "hook": "self-update", "outcome": "failed", "status": "network unreachable"}
+{"ts": "2026-09-06T23:37:46.405706+00:00", "hook": "self-update", "outcome": "updated", "status": "boo/v1.2.3"}
+{"ts": "2026-09-06T23:38:18.775397+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:38:18.776655+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:38:18.777477+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:38:18.781776+00:00", "hook": "self-update", "outcome": "skipped", "status": "auto-update disabled"}
+{"ts": "2026-09-06T23:38:18.782207+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:38:18.782719+00:00", "hook": "self-update", "outcome": "failed", "status": "network unreachable"}
+{"ts": "2026-09-06T23:38:18.783186+00:00", "hook": "self-update", "outcome": "updated", "status": "boo/v1.2.3"}
+{"ts": "2026-09-06T23:39:12.037436+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:12.038754+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:12.039572+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:22.259731+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:22.260975+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:22.261736+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:35.929269+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:35.930517+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:39:35.931231+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:40:44.720534+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:40:44.721768+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}
+{"ts": "2026-09-06T23:40:44.722561+00:00", "hook": "self-update", "outcome": "skipped", "status": "monorepo/charm-name not set"}

@@ -30,8 +30,8 @@ def _make_charm_zip() -> bytes:
     return buf.getvalue()
 
 
-def test_apply_downloads_and_swaps(monkeypatch, tmp_path):
-    """apply() resolves latest, downloads, unpacks, swaps and records tag."""
+def test_apply_downloads_and_extracts(monkeypatch, tmp_path):
+    """apply() resolves latest, downloads, unpacks into evolved/, and records tag."""
     monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "charm.py").write_text("print('old')\n")
@@ -54,8 +54,11 @@ def test_apply_downloads_and_swaps(monkeypatch, tmp_path):
     result = up.apply()
     assert result["updated"] is True
     assert result["applied_tag"] == "boo/v1.0.0"
-    assert (tmp_path / "src" / "charm.py").read_text() == "print('new')\n"
-    assert (tmp_path / "SOUL.md").read_text() == "new soul\n"
+    # The live charm dir is never touched -- only .infinicharms/evolved is written.
+    assert (tmp_path / "src" / "charm.py").read_text() == "print('old')\n"
+    evolved = state.evolved_dir()
+    assert (evolved / "src" / "charm.py").read_text() == "print('new')\n"
+    assert (evolved / "SOUL.md").read_text() == "new soul\n"
 
     st = state.State.load()
     assert st.applied_tag == "boo/v1.0.0"
@@ -137,7 +140,7 @@ def test_apply_is_idempotent_across_dispatches(monkeypatch, tmp_path):
     monkeypatch.setattr(up1, "_download", lambda url, dest: dest.write_bytes(charm_bytes))
     result1 = up1.apply()
     assert result1 == {"updated": True, "applied_tag": "boo/v1.0.0"}
-    assert (tmp_path / "src" / "charm.py").read_text() == "print('new')\n"
+    assert (state.evolved_dir() / "src" / "charm.py").read_text() == "print('new')\n"
 
     # Dispatch 2: another fresh Updater instance sees the same release and
     # no-ops, because state.json on disk already recorded the applied tag.
@@ -154,8 +157,9 @@ def test_apply_is_idempotent_across_dispatches(monkeypatch, tmp_path):
 def test_apply_swallows_update_error_is_caller_responsibility(monkeypatch, tmp_path):
     """apply() raises UpdateError on a bad download; it does NOT swallow it.
 
-    `_maybe_update()` in charm.py is what swallows this (so a failed *update*
-    never fails the hook itself) -- verified separately in test_charm.py.
+    `_maybe_self_update()` in charm.py is what swallows this (so a failed
+    *update* never fails the hook itself) -- verified separately in
+    test_main.py.
     """
     monkeypatch.setenv("JUJU_CHARM_DIR", str(tmp_path))
     up = updater.Updater("acme/mono", "boo")

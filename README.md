@@ -25,10 +25,12 @@ It bakes in three capabilities:
    the monorepo. It
    de-duplicates by failure fingerprint. See `SOUL.md` for the agent's persona
    and `prompts/` for the templates.
-2. **Hot-patch / self-update (Option A)** — on `config-changed`/`update-status`,
-   fetch the latest matching release for this charm from the monorepo
-   (`<charm-name>/vX.Y.Z`), unpack it, and swap in the new code under
-   `$JUJU_CHARM_DIR`.
+2. **Hot-patch / self-update (Option A)** — on *every* hook/action dispatch,
+   `main()` fetches the latest matching release for this charm from the
+   monorepo (`<charm-name>/vX.Y.Z`) and unpacks it in full into
+   `.infinicharms/evolved`, then dynamically loads and runs *that* checkout's
+   charm code instead of this file's own baked-in behaviour (see
+   `infinicharms.shim`). `$JUJU_CHARM_DIR` itself is never modified.
 3. **Hook monitoring** — records every hook run and status to
    `.infinicharms/hooks.log` for context.
 
@@ -83,10 +85,10 @@ namespaces like `z-ai/glm-5.3-flash`, or OpenAI names like `gpt-4o-mini`).
 |--------|---------|
 | `agent-status` | **Read-only.** Report the failure agent's most recent outcome (`filed` / `commented` / `skipped` / `failed`, with the issue number or error), the last hook failure it saw, and the fingerprint→issue ledger. Reads `.infinicharms/state.json`; makes no changes. |
 
-Everything else is automatic: the failure agent files issues on any hook failure
-and the updater self-patches on `config-changed`/`update-status`, so operators
-don't normally trigger anything manually. See `DEBUGGING.md` for how to use
-`agent-status` to diagnose the agent itself.
+Everything else is automatic: the failure agent files issues on any hook
+failure, and the updater self-patches on *every* dispatch (see
+`infinicharms.shim`), so operators don't normally trigger anything manually.
+See `DEBUGGING.md` for how to use `agent-status` to diagnose the agent itself.
 
 ## Demo: failure agent files a `not-implemented` issue from an unexpected error
 
