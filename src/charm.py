@@ -25,10 +25,14 @@ try/except as a safety net) is how failures reach GitHub issues (PLAN.md §2.1).
 
 import json
 import logging
+import os
+import shutil
 import subprocess
 import sys
 
 import ops
+import ops.log
+import ops.model
 
 from infinicharms import failure_agent, monitor, shim, updater
 from infinicharms.exceptions import NotImplementedFeature
@@ -175,6 +179,43 @@ def _config_get_bool(key: str, default: bool) -> bool:
     return bool(value)
 
 
+def _setup_bootstrap_logging() -> logging.Handler | None:
+    """Attach a temporary juju-log handler before ``ops.main()`` sets up its own.
+
+    ``ops.main()`` only wires Python logging through to the ``juju-log`` hook
+    tool once it constructs its internal manager -- which happens *after*
+    ``main()`` already ran ``_maybe_self_update()`` and resolved the charm
+    class via ``infinicharms.shim``. Without this, every log message emitted
+    during that phase would be silently dropped: the root logger has no
+    handler (and defaults to level ``WARNING``) until ``ops.main()`` runs.
+
+    The handler installed here is removed again in ``main()`` right before
+    ``ops.main()`` is called, so hand-off to ops's own handler is clean and
+    messages are never logged twice.
+
+    Best-effort: returns ``None`` (and logs nothing) outside a real Juju hook
+    context -- e.g. unit tests or a local dev shell -- rather than breaking
+    the dispatch. ``ops.model._ModelBackend()`` does *not* raise when
+    ``JUJU_UNIT_NAME`` is unset (it just falls back to an empty string), so
+    that alone can't be used to detect a non-hook context; instead this checks
+    for ``JUJU_UNIT_NAME`` and the ``juju-log`` hook tool explicitly, since
+    those are exactly the preconditions a real log call needs to succeed.
+    """
+    if not os.environ.get("JUJU_UNIT_NAME") or shutil.which("juju-log") is None:
+        return None  # not running as a real Juju hook
+    root_logger = logging.getLogger()
+    if any(isinstance(handler, ops.log.JujuLogHandler) for handler in root_logger.handlers):
+        return None  # already set up (e.g. by a previous call in this process)
+    try:
+        backend = ops.model._ModelBackend()
+    except Exception:  # noqa: BLE001 - never let logging setup break the dispatch
+        return None
+    handler = ops.log.JujuLogHandler(backend)
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
+    return handler
+
+
 def _agent_config_from_env() -> failure_agent.AgentConfig:
     """Build agent config outside a charm instance, using ``config-get``."""
     return failure_agent.AgentConfig(
@@ -269,10 +310,18 @@ def main() -> None:
     safety net for failures outside any observed handler (e.g. a broken
     checkout, or the evolved class itself misbehaving during construction); it
     never reports a failure the per-hook guard already reported.
+
+    A temporary juju-log handler is installed first (see
+    ``_setup_bootstrap_logging``) so logging from the self-update/resolution
+    phase actually reaches ``juju debug-log`` instead of being dropped before
+    ``ops.main()`` gets a chance to set up its own.
     """
+    bootstrap_handler = _setup_bootstrap_logging()
     _maybe_self_update()
     charm_cls = shim.resolve_charm_class(InfiniCharmsBaseCharm, _report_hook_failure)
     logger.info("Dispatching through %s", charm_cls.__qualname__)
+    if bootstrap_handler is not None:
+        logging.getLogger().removeHandler(bootstrap_handler)
     try:
         ops.main(charm_cls)
     except Exception:  # noqa: BLE001 - deliberately catch-all, then re-raise

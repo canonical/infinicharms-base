@@ -181,6 +181,65 @@ def test_recovery_loop_fail_then_succeed(monkeypatch, tmp_path):
     assert agent_calls == ["RuntimeError"]
 
 
+def test_setup_bootstrap_logging_noop_without_juju_unit_name(monkeypatch):
+    """Outside a real hook (no JUJU_UNIT_NAME), no handler is installed."""
+    monkeypatch.delenv("JUJU_UNIT_NAME", raising=False)
+    monkeypatch.setattr(charm_module.shutil, "which", lambda name: "/usr/bin/juju-log")
+    assert charm_module._setup_bootstrap_logging() is None
+
+
+def test_setup_bootstrap_logging_noop_without_juju_log_tool(monkeypatch):
+    """Outside a real hook (no juju-log on PATH), no handler is installed."""
+    monkeypatch.setenv("JUJU_UNIT_NAME", "infinicharms-base/0")
+    monkeypatch.setattr(charm_module.shutil, "which", lambda name: None)
+    assert charm_module._setup_bootstrap_logging() is None
+
+
+def test_setup_bootstrap_logging_installs_and_is_idempotent(monkeypatch):
+    """With a real-looking hook context, a JujuLogHandler is installed once."""
+    import logging
+
+    monkeypatch.setenv("JUJU_UNIT_NAME", "infinicharms-base/0")
+    monkeypatch.setattr(charm_module.shutil, "which", lambda name: "/usr/bin/juju-log")
+    monkeypatch.setattr(charm_module.ops.model, "_ModelBackend", lambda: object())
+
+    root_logger = logging.getLogger()
+    before = list(root_logger.handlers)
+    try:
+        handler = charm_module._setup_bootstrap_logging()
+        assert handler is not None
+        assert handler in root_logger.handlers
+
+        # A second call must not install a duplicate handler.
+        assert charm_module._setup_bootstrap_logging() is None
+    finally:
+        root_logger.handlers = before
+
+
+def test_main_removes_bootstrap_handler_before_ops_main(monkeypatch):
+    """main() hands off cleanly: the bootstrap handler is gone before ops.main() runs."""
+    import logging
+
+    sentinel_handler = logging.NullHandler()
+    monkeypatch.setattr(charm_module, "_setup_bootstrap_logging", lambda: sentinel_handler)
+    monkeypatch.setattr(charm_module, "_maybe_self_update", lambda: None)
+
+    root_logger = logging.getLogger()
+    root_logger.addHandler(sentinel_handler)
+    seen_during_dispatch = {}
+
+    def fake_ops_main(charm_cls):
+        seen_during_dispatch["present"] = sentinel_handler in root_logger.handlers
+
+    monkeypatch.setattr(charm_module.ops, "main", fake_ops_main)
+    try:
+        charm_module.main()
+    finally:
+        root_logger.removeHandler(sentinel_handler)
+
+    assert seen_during_dispatch["present"] is False
+
+
 def test_config_get_bool_parses_json_value(monkeypatch):
     """_config_get_bool shells out to `config-get --format=json` and parses it."""
 
